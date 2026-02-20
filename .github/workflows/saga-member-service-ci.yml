@@ -6,12 +6,12 @@ name: member-service CI
 on:
   push:
     branches: ["main"]
-    paths:
-      - 'saga-member-service/**'
+#    paths:
+#      - 'saga-member-service/**'
   pull_request:
     branches: ["main"]
-    paths:
-      - 'saga-member-service/**'
+#    paths:
+#      - 'saga-member-service/**'
 
 concurrency:
   group: ci-${{ github.ref }}
