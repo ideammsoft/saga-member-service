@@ -1,0 +1,133 @@
+# ------------------------------------------------------------
+# CI(지속적 통합) 파이프라인 구축
+# ------------------------------------------------------------
+name: member-service CI
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'saga-member-service/**'
+  pull_request:
+    branches: ["main"]
+    paths:
+      - 'saga-member-service/**'
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./saga-member-service    
+
+    # -------------------- MySQL 설정 수정 --------------------
+    services:
+      mysql:
+        image: mysql:8.0
+        ports:
+          - 3306:3306
+        env:
+          MYSQL_DATABASE: liveshop
+          MYSQL_USER: liveshop
+          MYSQL_PASSWORD: "1234"
+          MYSQL_ROOT_PASSWORD: "1234"
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -p1234 --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=20
+
+    # ------------------ 환경변수 및 오타 수정 ------------------
+    env:
+      SERVICE_NAME: saga-member-service
+      GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g"
+
+      SPRING_DATASOURCE_URL: jdbc:mysql://localhost:3306/liveshop
+      SPRING_DATASOURCE_USERNAME: liveshop
+      SPRING_DATASOURCE_PASSWORD: "1234"
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: com.mysql.cj.jdbc.Driver
+
+      SPRING_FLYWAY_ENABLED: "true"
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+
+      # CI 환경에서는 Config Server가 없으므로, Config Server 무력화
+      SPRING_CLOUD_CONFIG_ENABLED: "false" # 끄기
+      SPRING_CONFIG_IMPORT: "optional:none" # Config Server를 아예 찾지 말라는 강력한 지시
+      SPRING_CLOUD_CONFIG_FAIL_FAST: "false" # Config Server 연결에 실패해도 빌드를 멈추지 말라는 지시
+
+    # ------------------------------------------------------------
+    # [4] 실행 단계
+    # ------------------------------------------------------------
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21(Temurin)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: gradle #라이브러리를 캐시해서 다음 빌드때 더 빠르게
+
+      #gralde에 실행 권한 부여
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      #4단계 : DB 상태 확인을 위해 MySql 클라이언트 리눅스에 설치
+      - name: Install MySQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mysql-client
+
+
+      #5단계: 현재 설정된 정보들을 로그에 찍어 확인
+      - name: Print environment
+        run: |
+          echo "SERVICE_NAME=${SERVICE_NAME}"
+          echo "SPRING_CONFIG_IMPORT=${SPRING_CONFIG_IMPORT}"
+          echo "SPRING_CLOUD_CONFIG_ENABLED=${SPRING_CLOUD_CONFIG_ENABLED}"
+          java -version
+          ./gradlew -v
+
+      #6단계: MySQL이 켜질때까지 최대 2분동안 기다림
+      - name: Wait for MySQL
+        run: |
+          for i in {1..60}; do # 1부터 60까지 숫자를 세며 반복
+            if mysqladmin ping -h 127.0.0.1 -uroot -p1234 --silent; then
+              echo "MySQL is UP" 
+              exit 0 #성공적으로 연결 되었으니, 이 작업을 종료함
+            fi
+            echo "waiting mysql...($i)"
+            sleep 2 #2초동안 쉼(반복문은 너무 빠르므로)
+          done
+          
+          echo "MySQL failed to start.." #120 초 동안 기다렸음에도 반응이 없음..
+          exit 1 #결국 mysql접속은 실패 상태로 이 작업을 종료..
+
+      #7단계: 테스트 코드 돌림(제일 중요한 순간)
+      #테스트란, CI의 목적이면서 가장 마지막 단계임, 즉 문제가 없는 코드만 CD를 수행하기 위한 선행작업
+      - name: Test
+        env:
+          SPRING_PROFILES_ACTIVE: test # test 프로필을 써서 로컬 설정과 섞이지 않게 함
+        run: ./gradlew test
+
+      #8단계: 테스트가 통과되면 실제 실행파일인 jar생성
+      - name: Build bootJar
+        run: ./gradlew bootJar
+
+      #9단계: 가상 리눅스가 만든 jar 파일을 깃헙 웹사이트에 업로드해 보관
+      - name: Upload JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.SERVICE_NAME }}-${{ github.sha }} # 이름표-커밋번호 형식으로 저장해 달라
+          path: saga-member-service/build/libs/*.jar #가상 리눅스 디렉토리에 있는 jar파일의 위치
+          if-no-files-found: error #파일이 없으면 에러 발생
+
+      - name: Build with Gradle
+        working-directory: ./saga-member-service # 해당 서비스 폴더로 이동해서 실행
+        run: ./gradlew build
+          
