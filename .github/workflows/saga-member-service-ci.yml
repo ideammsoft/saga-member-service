@@ -74,11 +74,11 @@ jobs:
           distribution: 'temurin'
           cache: gradle # 라이브러리를 캐시해서 다음 빌드때 더 빠르게
 
-      # [수정] 'run' 앞의 들여쓰기가 잘못되어 있어 수정했습니다.
+      # [수정] 들여쓰기 오류를 수정하여 파일 목록을 확인합니다.
       - name: Check files
         run: ls -R
 
-      # gradle에 실행 권한 부여
+      # gralde에 실행 권한 부여
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
@@ -87,6 +87,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y mysql-client
+
 
       # 5단계: 현재 설정된 정보들을 로그에 찍어 확인
       - name: Print environment
@@ -119,12 +120,4 @@ jobs:
           SPRING_PROFILES_ACTIVE: test # test 프로필을 써서 로컬 설정과 섞이지 않게 함
         run: ./gradlew test
 
-      # 8단계: 테스트가 통과되면 실제 실행파일인 jar생성
-      - name: Build bootJar
-        run: ./gradlew bootJar
-
-      # 9단계: 가상 리눅스가 만든 jar 파일을 깃헙 웹사이트에 업로드해 보관
-      - name: Upload JAR artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.SERVICE_NAME }}-${{ github.sha }} # 이름표-커밋번호 형식
+      # 8단계
