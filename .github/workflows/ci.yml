@@ -116,6 +116,7 @@ jobs:
           ./gradlew bootBuildImage \
             --imageName=${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
+
       - name: GHCR로 Push
         if: github.event_name == 'push'
         run: |
