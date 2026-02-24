@@ -15,7 +15,7 @@ class SagaMemberServiceApplicationTests {
     int port;
     //웹상의 요청을 시도하는 객체 (Rest API 호출 시 많이 사용)
     @Autowired
-    private TestRestTemplate testRestTemplate
+    private TestRestTemplate testRestTemplate;
     @Test
     void contextLoads() {
         String url="http://localhost:"+port+"/api/members?providerName=google";
