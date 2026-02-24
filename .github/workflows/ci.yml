@@ -1,47 +1,32 @@
-# ------------------------------------------------------------
-# ci 단계에서 단순한 테스트에 그치는 것이 아니라 mysql 연동 테스트가지 진행해야 실무넉임
-# 그러기 위해서는 임시 리눅스에 mysql 컨테이너를 도커로 실행하고 그안에 Provider
-# 테이블 및 record insert까지 진행해봄
-# ------------------------------------------------------------
-
-# ------------------------------------------------------------
-# CI(지속적 통합) 파이프라인 구축
-# ------------------------------------------------------------
 name: member-service CI
 on:
   push:
     branches: ["main"]
-  #    paths:
-  #      - 'saga-member-service/**'
   pull_request:
     branches: ["main"]
-#    paths:
-#      - 'saga-member-service/**'
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# [수정] DockerImage를 GHCR에 넣기 위한 권한 부여 (jobs 레벨로 이동)
 permissions:
-  contents: read # GitHub Repository 소스 코드에 대한 읽기 권한 부여
-  packages: write # GHCR에 대한 패키지 쓰기 권한 부여
+  contents: read
+  packages: write
 
 jobs:
   build-test:
     runs-on: ubuntu-latest
-    # [수정] 깃허브 최상위에 파일들이 있으므로 경로를 루트(./)로 설정합니다.
     defaults:
       run:
         working-directory: ./
 
-    # -------------------- MySQL 설정 수정 --------------------
+    # -------------------- MySQL 설정 --------------------
     services:
       mysql:
         image: mysql:8.0
         ports:
           - 3306:3306
-        env: #미리설계해둔 약속한 변수임
+        env:
           MYSQL_DATABASE: liveshop
           MYSQL_USER: liveshop
           MYSQL_PASSWORD: "1234"
@@ -53,41 +38,27 @@ jobs:
           --health-timeout=5s
           --health-retries=20
 
-    # ------------------ 환경변수 및 오타 수정 ------------------
     env:
       SERVICE_NAME: saga-member-service
       GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g"
-
-      # CI 환경에서는 Config, eureka Server가 없으므로, Config Server 무력화. member-service 단독으로 존재해야함
-      SPRING_CLOUD_CONFIG_ENABLED: "false" # 끄기
-      SPRING_CONFIG_IMPORT: "optional:none" # Config Server를 아예 찾지 말라는 강력한 지시
-      SPRING_CLOUD_CONFIG_FAIL_FAST: "false" # Config Server 연결에 실패해도 빌드를 멈추지 말라는 지시
-      SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false" # (중요) import-check 자체를 끔 (없어도 에러로 중단하지 않게)
+      SPRING_CLOUD_CONFIG_ENABLED: "false"
+      SPRING_CONFIG_IMPORT: "optional:none"
+      SPRING_CLOUD_CONFIG_FAIL_FAST: "false"
+      SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
       EUREKA_CLIENT_ENABLED: "false"
-
-      #-------------------------------
-      # [테스트 프로필 명시]
-      #-------------------------------
       SPRING_PROFILES_ACTIVE: test
-
-      #-------------------------------
-      # [도커 이미지 생성을 위한 변수들]
-      #-------------------------------
       IMAGE_REGISTRY: ghcr.io
-      IMAGE_OWNER: ${{ github.repository_owner }} # 내장된 전역변수 집합인 GitHub Context 중 하나임
+      IMAGE_OWNER: ${{ github.repository_owner }}
       IMAGE_NAME: saga-member-service
-      IMAGE_TAG: ${{ github.sha }} # 워크플로우를 커밋 시 할당된 고유 ID(SHA-1 해시값)
+      IMAGE_TAG: ${{ github.sha }}
 
-      #-------------------------------
-      # DB 접속정보
-      #-------------------------------
-      SPRING_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/liveshop
+      # DB 접속정보 (Service name인 'mysql' 대신 127.0.0.1 사용)
+      SPRING_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/liveshop?useSSL=false&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: "liveshop"
       SPRING_DATASOURCE_PASSWORD: "1234"
+      # [추가] 테이블 자동 생성을 위한 JPA 설정 강제 주입
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
 
-    # ------------------------------------------------------------
-    # [4] 실행 단계
-    # ------------------------------------------------------------
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -97,82 +68,55 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
-          cache: gradle # 라이브러리를 캐시해서 다음 빌드때 더 빠르게
+          cache: gradle
 
-      # [수정] 들여쓰기 오류를 수정하여 파일 목록을 확인합니다.
       - name: Check files
         run: ls -R
 
-      # 3단계 : gralde에 실행 권한 부여
-      - name: 그래들에 실행권한 부여 rant execute permission for gradlew
+      - name: 그래들에 실행권한 부여
         run: chmod +x gradlew
-      # 3-1단계
-      - name: 환경 변수 출력
-        run: |
-          echo "SERVICE_NAME=${SERVICE_NAME}"
-          echo "SPRING_CLOUD_CONFIG_ENABLED=${SPRING_CLOUD_CONFIG_ENABLED}"
-          echo "SPRING_CONFIG_IMPORT=${SPRING_CONFIG_IMPORT}"
-          echo "SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE}"
-          echo "SPRING_CLOUD_CONFIG_FAIL_FAST=${SPRING_CLOUD_CONFIG_FAIL_FAST}"
-          echo "EUREKA_CLIENT_ENABLED=${EUREKA_CLIENT_ENABLED}"
-      # 4단계 : DB 상태 확인을 위해 MySql 클라이언트 리눅스에 설치
+
       - name: Install MySQL client
         run: |
           sudo apt-get update
           sudo apt-get install -y mysql-client
 
-
-      # 5단계: 현재 설정된 정보들을 로그에 찍어 확인
-      - name: Print environment
-        run: |
-          echo "SERVICE_NAME=${SERVICE_NAME}"
-          echo "SPRING_CONFIG_IMPORT=${SPRING_CONFIG_IMPORT}"
-          echo "SPRING_CLOUD_CONFIG_ENABLED=${SPRING_CLOUD_CONFIG_ENABLED}"
-          java -version
-          ./gradlew -v
-
-      # 6단계: MySQL이 켜질때까지 최대 2분동안 기다림
       - name: Wait for MySQL
         run: |
-          for i in {1..60}; do # 1부터 60까지 숫자를 세며 반복
+          for i in {1..60}; do
             if mysqladmin ping -h 127.0.0.1 -uroot -p1234 --silent; then
               echo "MySQL is UP" 
-              exit 0 # 성공적으로 연결 되었으니, 이 작업을 종료함
+              # [핵심 교정] 에러 방지를 위해 provider 테이블 수동 생성 (애플리케이션 설정이 완벽하지 않을 경우 대비)
+              mysql -h 127.0.0.1 -uliveshop -p1234 liveshop -e "
+                CREATE TABLE IF NOT EXISTS provider (
+                  provider_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                  provider_name VARCHAR(255) NOT NULL
+                );
+              "
+              exit 0 
             fi
             echo "waiting mysql...($i)"
-            sleep 2 # 2초동안 쉼(반복문은 너무 빠르므로)
+            sleep 2 
           done
-          
-          echo "MySQL failed to start.." # 120 초 동안 기다렸음에도 반응이 없음..
-          exit 1 # 결국 mysql접속은 실패 상태로 이 작업을 종료..
+          exit 1 
 
-      # 7단계: 테스트 코드 돌림(제일 중요한 순간)
-      # 테스트란, CI의 목적이면서 가장 마지막 단계임, 즉 문제가 없는 코드만 CD를 수행하기 위한 선행작업
       - name: Test 실행해보기
-        env:
-          SPRING_PROFILES_ACTIVE: test # test 프로필을 써서 로컬 설정과 섞이지 않게 함..
-          SPRING_CLOUD_CONFIG_ENABLED: "false" # 끄기
-          SPRING_CLOUD_CONFIG_FAIL_FAST: "false" # Config Server 연결에 실패해도 빌드를 멈추지 말라는 지시
-          SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false" # import-check 끄기(테스트 단계에서도 동일하게)
         run: ./gradlew test
 
-
-      # 7) 도커 이미지 빌드 및 푸시(GHCR - GitHub Container Registry -생성된 도커 이미지를 보관하는 깃험이 제공하는 창고)
-      - name: Login to GHCR(도커 이미지 만들어서 GHCR에 Push하기)
-        if: github.event_name == 'push' # PR에서는 보통 GHCR에 Dockerfile을 저장하지 않기 위해. 즉 push 이벤트에 대해서만 GHCR에 로그인 시키겠음
-        uses: docker/login-action@v3 # 깃헙에서 만든 깃헙 로그인용 툴
+      - name: Login to GHCR
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
         with:
-          registry: ${{ env.IMAGE_REGISTRY }} # GHCR의 주소
-          username: ${{ github.actor }} # 지금 사용중인 사용자  github 사용자 계정
-          # [수정] GHITHUB_TOKEN -> GITHUB_TOKEN (오타 수정)
-          password: ${{ secrets.GITHUB_TOKEN }} # 로그인에 사용중인 PAT
+          registry: ${{ env.IMAGE_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build OCI Image By 스프링부트 제공 Buildpacks 이용 ( Docker file 없이 이미지를 생성하는 툴)
+      - name: Build OCI Image By Buildpacks
         run: |
           ./gradlew bootBuildImage \
             --imageName=${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
-      - name: GHCR로 Push(가상 리눅스에허 GHCR로 Push)
+      - name: GHCR로 Push
         if: github.event_name == 'push'
         run: |
           docker push ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
