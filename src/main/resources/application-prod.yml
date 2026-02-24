@@ -1,0 +1,12 @@
+#운영서버  기준  - dev
+
+#Config Server 찾기
+spring:
+  config:
+    import: "optional:configserver:http://config-server:8881"
+
+#Eureka Server 찾기
+eureka:
+  client:
+    service-url:
+      defaultZone: http://eureka-server:8761/eureka/

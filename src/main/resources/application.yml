@@ -2,13 +2,23 @@ spring:
   application:
     name: saga-member-service
 
-  #CI를 위해서는 반드시 optional 로 설정해야 함, 만일 이렇게 하지 않으면
-  #CI 테스트에서 실패하게 됨....
-  config:
-    import: "optional:configserver:http://localhost:8881"
+  datasource:
+    url: jdbc:mysql://localhost:3306/liveshop
+    username: liveshop
+    password: "1234"
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+    # flyway DDL을 맡기므로 JPA는 DDL 관여하지 않고, 유효성 검증만 하자
+    jpa:
+      hibernate:
+        ddl-auto: validate
+
+    flyway:
+      enabled: true
 
 logging:
   level:
     org.hibernate.SQL: debug
     org.hibernate.orm.jdbc.bind: trace
     org.flywaydb: info
+
