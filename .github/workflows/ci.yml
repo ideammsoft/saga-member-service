@@ -81,21 +81,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y mysql-client
 
+      # 수정 전 (Wait for MySQL 단계)
       - name: Wait for MySQL
         run: |
           for i in {1..60}; do
             if mysqladmin ping -h 127.0.0.1 -uroot -p1234 --silent; then
-              echo "MySQL is UP" 
-              # [핵심 교정] 에러 방지를 위해 provider 테이블 수동 생성 (애플리케이션 설정이 완벽하지 않을 경우 대비)
-              mysql -h 127.0.0.1 -uliveshop -p1234 liveshop -e "
-                CREATE TABLE IF NOT EXISTS provider (
-                  provider_id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                  provider_name VARCHAR(255) NOT NULL
-                );
-              "
+              echo "MySQL is UP"
+              # 아래의 mysql -e "CREATE TABLE..." 부분 전체 삭제
               exit 0 
             fi
-            echo "waiting mysql...($i)"
             sleep 2 
           done
           exit 1 
