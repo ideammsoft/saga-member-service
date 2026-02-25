@@ -107,12 +107,12 @@ jobs:
 
       - name: Build OCI Image By Buildpacks
         run: |
-          # [핵심] GCP 서버 로그(image_a57207.png)의 인증서 에러를 해결하기 위해 
-          # 빌드 인자와 런타임 환경변수 모두에 비활성화 설정을 주입합니다.
+          # [핵심] 인증서 에러 해결과 Flyway 강제 활성화를 위해 빌드 시점에 설정 주입
           ./gradlew bootBuildImage \
             --imageName=${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
-            -PbuildArgs="--env BPL_ENABLE_OPENSSL_CERTIFICATE_LOADER=false" \
-            -Dspring-boot.build-image.env.BPL_ENABLE_OPENSSL_CERTIFICATE_LOADER=false
+            -Dspring-boot.build-image.env.BPL_ENABLE_OPENSSL_CERTIFICATE_LOADER=false \
+            -Dspring-boot.build-image.env.SPRING_FLYWAY_ENABLED=true \
+            -Dspring-boot.build-image.env.SPRING_FLYWAY_BASELINE_ON_MIGRATE=true
 
       - name: GHCR로 Push
         if: github.event_name == 'push'
