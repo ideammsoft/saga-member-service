@@ -85,6 +85,7 @@ jobs:
           registry: ${{ env.IMAGE_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+          
 
       - name: Build OCI Image (GCP 인증서 에러 해결 포함)
         run: |
