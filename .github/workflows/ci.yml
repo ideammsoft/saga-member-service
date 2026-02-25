@@ -20,7 +20,7 @@ jobs:
       run:
         working-directory: ./
 
-    # -------------------- MySQL 설정 (CI 테스트용) --------------------
+    # -------------------- MySQL 설정 (테스트용) --------------------
     services:
       mysql:
         image: mysql:8.0
@@ -41,15 +41,14 @@ jobs:
     env:
       SERVICE_NAME: saga-member-service
       GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g"
-      
-      # [해결] Config Server 관련 에러 방지 설정
+      # [해결] Config Server 누락 시 발생하는 테스트 실패 방지
       SPRING_CLOUD_CONFIG_ENABLED: "false"
       SPRING_CONFIG_IMPORT: "optional:configserver:"
       SPRING_CLOUD_CONFIG_FAIL_FAST: "false"
       SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
       EUREKA_CLIENT_ENABLED: "false"
       SPRING_PROFILES_ACTIVE: test
-      
+
       IMAGE_REGISTRY: ghcr.io
       IMAGE_OWNER: ${{ github.repository_owner }}
       IMAGE_NAME: saga-member-service
@@ -85,10 +84,20 @@ jobs:
           registry: ${{ env.IMAGE_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-          
 
       - name: Build OCI Image (GCP 인증서 에러 해결 포함)
         run: |
-          # BPL_ENABLE_OPENSSL_CERTIFICATE_LOADER=false 설정을 주입하여 빌드
+          # [핵심] image_a57207.png의 인증서 에러를 해결하기 위한 환경변수 주입
           ./gradlew bootBuildImage \
-            --imageName=${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }
+            --imageName=${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
+            -Dspring-boot.build-image.env.BPL_ENABLE_OPENSSL_CERTIFICATE_LOADER=false
+          
+          # 서버에서 최신 이미지를 쉽게 가져올 수 있도록 latest 태그 추가
+          docker tag ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
+                     ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: GHCR로 Push
+        if: github.event_name == 'push'
+        run: |
+          docker push ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          docker push ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:latest
