@@ -52,11 +52,9 @@ jobs:
       IMAGE_NAME: saga-member-service
       IMAGE_TAG: ${{ github.sha }}
 
-      # DB 접속정보 (Service name인 'mysql' 대신 127.0.0.1 사용)
       SPRING_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/liveshop?useSSL=false&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: "liveshop"
       SPRING_DATASOURCE_PASSWORD: "1234"
-      # [추가] 테이블 자동 생성을 위한 JPA 설정 강제 주입
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
 
     steps:
@@ -70,21 +68,12 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      - name: Check files
-        run: ls -R
-
       - name: 그래들에 실행권한 부여
-        # [해결] image_a55b60.png에서 발생한 'missing operand' 에러 수정
         run: chmod +x gradlew
 
-      - name: Install MySQL client
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y mysql-client
-
-      # 수정 전 (Wait for MySQL 단계)
       - name: Wait for MySQL
         run: |
+          sudo apt-get update && sudo apt-get install -y mysql-client
           for i in {1..60}; do
             if mysqladmin ping -h 127.0.0.1 -uroot -p1234 --silent; then
               echo "MySQL is UP"
@@ -107,14 +96,23 @@ jobs:
 
       - name: Build OCI Image By Buildpacks
         run: |
-          # [핵심] 인증서 에러 해결과 Flyway 강제 활성화를 위해 빌드 시점에 설정 주입
+          # [해결] 해시 태그 이미지 빌드
           ./gradlew bootBuildImage \
             --imageName=${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
             -Dspring-boot.build-image.env.BPL_ENABLE_OPENSSL_CERTIFICATE_LOADER=false \
             -Dspring-boot.build-image.env.SPRING_FLYWAY_ENABLED=true \
             -Dspring-boot.build-image.env.SPRING_FLYWAY_BASELINE_ON_MIGRATE=true
 
+      - name: Add Latest Tag
+        if: github.event_name == 'push'
+        run: |
+          # [추가] 로컬 이미지를 latest 태그로 하나 더 생성
+          docker tag ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
+                     ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:latest
+
       - name: GHCR로 Push
         if: github.event_name == 'push'
         run: |
+          # 해시 태그와 latest 태그 모두 푸시
           docker push ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          docker push ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:latest
