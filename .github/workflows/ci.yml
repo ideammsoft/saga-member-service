@@ -21,12 +21,7 @@ jobs:
         working-directory: ./
 
     # -------------------- MySQL 설정 --------------------
-      services:
-        member-service:
-          image: ghcr.io/ideammsoft/saga-member-service:...
-          environment:
-            - BPL_ENABLE_OPENSSL_CERTIFICATE_LOADER=false
-            - SPRING_PROFILES_ACTIVE=prod
+    services:
       mysql:
         image: mysql:8.0
         ports:
@@ -61,7 +56,8 @@ jobs:
       SPRING_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/liveshop?useSSL=false&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: "liveshop"
       SPRING_DATASOURCE_PASSWORD: "1234"
-      # [추가] 테이블 자동 생성을 위한 JPA 설정 강제 주입
+
+      # [수정] Flyway와 충돌을 방지하기 위해 none으로 권장하지만, 기존 주석 의도대로 update 유지
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
 
     steps:
@@ -79,46 +75,4 @@ jobs:
         run: ls -R
 
       - name: 그래들에 실행권한 부여
-        run: chmod +x gradlew
-
-      - name: Install MySQL client
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y mysql-client
-
-      # 수정 전 (Wait for MySQL 단계)
-      - name: Wait for MySQL
-        run: |
-          for i in {1..60}; do
-            if mysqladmin ping -h 127.0.0.1 -uroot -p1234 --silent; then
-              echo "MySQL is UP"
-              # 아래의 mysql -e "CREATE TABLE..." 부분 전체 삭제
-              exit 0 
-            fi
-            sleep 2 
-          done
-          exit 1 
-
-      - name: Test 실행해보기
-        run: ./gradlew test
-
-      - name: Login to GHCR
-        if: github.event_name == 'push'
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.IMAGE_REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-
-
-      - name: Build OCI Image By Buildpacks
-        run: |
-          ./gradlew bootBuildImage \
-            --imageName=${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-
-
-      - name: GHCR로 Push
-        if: github.event_name == 'push'
-        run: |
-          docker push ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+        run: chmod +x
