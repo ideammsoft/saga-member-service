@@ -13,6 +13,7 @@ spring:
       hibernate:
         ddl-auto: validate
 
+
     flyway:
       enabled: true
       # 기존에 테이블이 있어도 무시하고 Flyway 이력을 기록하기 시작함
