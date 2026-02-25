@@ -20,7 +20,7 @@ jobs:
       run:
         working-directory: ./
 
-    # -------------------- MySQL 설정 --------------------
+    # -------------------- MySQL 설정 (테스트용) --------------------
     services:
       mysql:
         image: mysql:8.0
@@ -74,7 +74,7 @@ jobs:
         run: ls -R
 
       - name: 그래들에 실행권한 부여
-        # [수정] gradlew 파일명을 명시하여 image_a55b60.png의 에러 해결
+        # [해결] image_a55b60.png에서 발생한 'missing operand' 에러 수정
         run: chmod +x gradlew
 
       - name: Install MySQL client
@@ -88,7 +88,6 @@ jobs:
           for i in {1..60}; do
             if mysqladmin ping -h 127.0.0.1 -uroot -p1234 --silent; then
               echo "MySQL is UP"
-              # 아래의 mysql -e "CREATE TABLE..." 부분 전체 삭제
               exit 0 
             fi
             sleep 2 
@@ -108,9 +107,11 @@ jobs:
 
       - name: Build OCI Image By Buildpacks
         run: |
-          # [핵심 추가] GCP 서버의 'data truncated' 에러를 방지하기 위해 인증서 로더를 비활성화합니다.
+          # [핵심] GCP 서버 로그(image_a57207.png)의 인증서 에러를 해결하기 위해 
+          # 빌드 인자와 런타임 환경변수 모두에 비활성화 설정을 주입합니다.
           ./gradlew bootBuildImage \
             --imageName=${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
+            -PbuildArgs="--env BPL_ENABLE_OPENSSL_CERTIFICATE_LOADER=false" \
             -Dspring-boot.build-image.env.BPL_ENABLE_OPENSSL_CERTIFICATE_LOADER=false
 
       - name: GHCR로 Push
