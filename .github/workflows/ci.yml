@@ -21,7 +21,12 @@ jobs:
         working-directory: ./
 
     # -------------------- MySQL 설정 --------------------
-    services:
+      services:
+        member-service:
+          image: ghcr.io/ideammsoft/saga-member-service:...
+          environment:
+            - BPL_ENABLE_OPENSSL_CERTIFICATE_LOADER=false
+            - SPRING_PROFILES_ACTIVE=prod
       mysql:
         image: mysql:8.0
         ports:
