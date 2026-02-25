@@ -20,7 +20,7 @@ jobs:
       run:
         working-directory: ./
 
-    # -------------------- MySQL 설정 (테스트용) --------------------
+    # -------------------- MySQL 설정 (CI 테스트용) --------------------
     services:
       mysql:
         image: mysql:8.0
@@ -40,18 +40,12 @@ jobs:
 
     env:
       SERVICE_NAME: saga-member-service
-      GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g"
-      SPRING_CLOUD_CONFIG_ENABLED: "false"
-      SPRING_CONFIG_IMPORT: "optional:none"
-      SPRING_CLOUD_CONFIG_FAIL_FAST: "false"
-      SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
-      EUREKA_CLIENT_ENABLED: "false"
-      SPRING_PROFILES_ACTIVE: test
       IMAGE_REGISTRY: ghcr.io
       IMAGE_OWNER: ${{ github.repository_owner }}
       IMAGE_NAME: saga-member-service
       IMAGE_TAG: ${{ github.sha }}
 
+      # CI 환경 DB 접속 정보
       SPRING_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/liveshop?useSSL=false&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: "liveshop"
       SPRING_DATASOURCE_PASSWORD: "1234"
@@ -69,19 +63,8 @@ jobs:
           cache: gradle
 
       - name: 그래들에 실행권한 부여
+        # gradlew 파일명을 명시하여 에러 방지
         run: chmod +x gradlew
-
-      - name: Wait for MySQL
-        run: |
-          sudo apt-get update && sudo apt-get install -y mysql-client
-          for i in {1..60}; do
-            if mysqladmin ping -h 127.0.0.1 -uroot -p1234 --silent; then
-              echo "MySQL is UP"
-              exit 0 
-            fi
-            sleep 2 
-          done
-          exit 1 
 
       - name: Test 실행해보기
         run: ./gradlew test
@@ -94,19 +77,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build OCI Image By Buildpacks
+      - name: Build OCI Image (인증서 에러 해결 포함)
         run: |
-          # [해결] 해시 태그 이미지 빌드
+          # GCP 서버의 인증서 로더 에러 해결을 위한 설정 주입
           ./gradlew bootBuildImage \
             --imageName=${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
-            -Dspring-boot.build-image.env.BPL_ENABLE_OPENSSL_CERTIFICATE_LOADER=false \
-            -Dspring-boot.build-image.env.SPRING_FLYWAY_ENABLED=true \
-            -Dspring-boot.build-image.env.SPRING_FLYWAY_BASELINE_ON_MIGRATE=true
-
-      - name: Add Latest Tag
-        if: github.event_name == 'push'
-        run: |
-          # [추가] 로컬 이미지를 latest 태그로 하나 더 생성
+            -Dspring-boot.build-image.env.BPL_ENABLE_OPENSSL_CERTIFICATE_LOADER=false
+          
+          # 서버에서 사용하기 편하도록 latest 태그 추가 생성
           docker tag ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
                      ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:latest
 
