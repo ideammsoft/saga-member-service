@@ -15,6 +15,10 @@ spring:
 
     flyway:
       enabled: true
+      # 기존에 테이블이 있어도 무시하고 Flyway 이력을 기록하기 시작함
+      baseline-on-migrate: true
+      # 마이그레이션 파일이 없을 때의 기준 버전 (보통 0)
+      baseline-version: 0
 
 logging:
   level:
